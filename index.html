@@ -380,7 +380,7 @@ Respond ONLY with valid JSON matching this schema. No markdown backticks, no pre
        Main App
        ───────────────────────────────────────────────── */
     function App() {
-      const [blocks,setBlocks]=useState([{id:uid(),supports:[{id:uid(),text:"",linkedFrom:null}],conclusion:""}]);
+      const [blocks,setBlocks]=useState([{id:uid(),supports:[{id:uid(),text:"",linkedFrom:null}],conclusion:"",diagnostic:false}]);
       const [copied,setCopied]=useState(false);
       const iRefs=useRef({});
       const isSimple=blocks.length===1;
@@ -407,6 +407,7 @@ Respond ONLY with valid JSON matching this schema. No markdown backticks, no pre
           id: uid(),
           supports,
           conclusion: parsed.conclusion || "",
+          diagnostic: false,
         };
         setBlocks([newBlock]);
 
@@ -424,7 +425,8 @@ Respond ONLY with valid JSON matching this schema. No markdown backticks, no pre
       const updateRival = (i, t) => setRivals(p => p.map((r, ri) => ri === i ? t : r));
       const removeRival = (i) => { if (rivals.length > 1) setRivals(p => p.filter((_, ri) => ri !== i)); };
 
-      const addBlock=()=>setBlocks(p=>[...p,{id:uid(),supports:[{id:uid(),text:"",linkedFrom:null}],conclusion:""}]);
+      const addBlock=()=>setBlocks(p=>[...p,{id:uid(),supports:[{id:uid(),text:"",linkedFrom:null}],conclusion:"",diagnostic:false}]);
+      const toggleDiagnostic=bid=>setBlocks(p=>p.map(b=>b.id===bid?{...b,diagnostic:!b.diagnostic}:b));
       const removeBlock=bid=>{if(blocks.length===1)return;setBlocks(p=>p.filter(b=>b.id!==bid).map(b=>({...b,supports:b.supports.map(s=>s.linkedFrom===bid?{...s,linkedFrom:null,text:""}:s)})))};
       const addSupport=bid=>{const n={id:uid(),text:"",linkedFrom:null};setBlocks(p=>p.map(b=>b.id===bid?{...b,supports:[...b.supports,n]}:b));setTimeout(()=>iRefs.current[n.id]?.focus(),50)};
       const updateSupport=(bid,sid,t)=>setBlocks(p=>p.map(b=>b.id===bid?{...b,supports:b.supports.map(s=>s.id===sid?{...s,text:t}:s)}:b));
@@ -459,6 +461,7 @@ Respond ONLY with valid JSON matching this schema. No markdown backticks, no pre
       const getGNums=()=>{let c=1;const m={};topoOrder.forEach(bid=>{const block=blocks.find(b=>b.id===bid);if(block)block.supports.forEach(s=>{m[s.id]=c++})});return m};
       const gNums=getGNums();
 
+      const mkSep=(mx,diag)=>diag?("=".repeat(mx-1)+"d\n"+"=".repeat(mx-1)+" "):"-".repeat(mx);
       const buildOutput=()=>{
         const gn=getGNums();const cL=getConcLabels();
         let core = "";
@@ -469,7 +472,7 @@ Respond ONLY with valid JSON matching this schema. No markdown backticks, no pre
           const cLine=`C1. ${block.conclusion}`;
           const all=[...sL,cLine];
           const mx=Math.max(...all.map(l=>l.length),10);
-          core = [...sL,"-".repeat(mx),cLine].join("\n");
+          core = [...sL,mkSep(mx,block.diagnostic),cLine].join("\n");
         } else {
           const order=getTopoOrder();
           const isLinear=()=>{if(order.length<=1)return true;for(const bid of order){let fc=0;blocks.forEach(b=>{b.supports.forEach(s=>{if(s.linkedFrom===bid)fc++})});if(fc>1)return false}return true};
@@ -481,7 +484,7 @@ Respond ONLY with valid JSON matching this schema. No markdown backticks, no pre
               let skipId=null;if(oi>0){const prevBid=order[oi-1];const ls=block.supports.find(s=>s.linkedFrom===prevBid);if(ls)skipId=ls.id}
               block.supports.filter(s=>s.id!==skipId).forEach(s=>{const num=gn[s.id];let text=s.text;if(s.linkedFrom){const fb=blocks.find(b=>b.id===s.linkedFrom);const fl=cL[s.linkedFrom]||"?";text=(fb?.conclusion||`[${fl}]`)+` [= ${fl}]`}res.push(`${pad}S${num}. ${text}`)});
               const allSL=block.supports.map(s=>{const num=gn[s.id];let text=s.text;if(s.linkedFrom){const fb=blocks.find(b=>b.id===s.linkedFrom);const fl=cL[s.linkedFrom]||"?";text=(fb?.conclusion||`[${fl}]`)+` [= ${fl}]`}return`${pad}S${num}. ${text}`});
-              const cLine=`${pad}${cl}. ${block.conclusion}`;const allLines=[...allSL,cLine];const mx=Math.max(...allLines.map(l=>l.length),ci+10);res.push(pad+"-".repeat(mx-ci));
+              const cLine=`${pad}${cl}. ${block.conclusion}`;const allLines=[...allSL,cLine];const mx=Math.max(...allLines.map(l=>l.length),ci+10);const sepW=mx-ci;const sep=block.diagnostic?("=".repeat(sepW-1)+"d\n"+pad+"=".repeat(sepW-1)+" "):"-".repeat(sepW);res.push(pad+sep);
               if(oi<order.length-1){const nBid=order[oi+1];const nBlock=blocks.find(b=>b.id===nBid);const ls=nBlock?.supports.find(s=>s.linkedFrom===bid);if(ls){const arrow="  ------->  ";const ln=gn[ls.id];const ll=cL[bid];res.push(`${cLine}${arrow}S${ln}. ${block.conclusion} [= ${ll}]`);ci=cLine.length+arrow.length}else{res.push(cLine);res.push("")}}else{res.push(cLine)}
             }
             core = res.join("\n");
@@ -491,7 +494,7 @@ Respond ONLY with valid JSON matching this schema. No markdown backticks, no pre
               const bid=order[oi];const block=blocks.find(b=>b.id===bid);if(!block)continue;const cl=cL[bid];if(oi>0)res.push("");
               const sLines=block.supports.map(s=>{const num=gn[s.id];let text=s.text;if(s.linkedFrom){const fb=blocks.find(b=>b.id===s.linkedFrom);const fl=cL[s.linkedFrom]||"?";text=(fb?.conclusion||`[${fl}]`)+` [= ${fl}]`}return`S${num}. ${text}`});
               const cLine=`${cl}. ${block.conclusion}`;const allLines=[...sLines,cLine];const mx=Math.max(...allLines.map(l=>l.length),10);
-              sLines.forEach(l=>res.push(l));res.push("-".repeat(mx));
+              sLines.forEach(l=>res.push(l));res.push(mkSep(mx,block.diagnostic));
               let feedsInto=null;blocks.forEach(b=>{b.supports.forEach(s=>{if(s.linkedFrom===bid)feedsInto={tid:b.id,sid:s.id}})});
               if(feedsInto){const tl=cL[feedsInto.tid];const tn=gn[feedsInto.sid];const isM=feedsInto.tid===mainBlockId;res.push(`${cLine}  -------> S${tn} of ${isM?"Main Argument":`Argument ${tl}`}`)}else{res.push(cLine)}
             }
@@ -517,7 +520,7 @@ Respond ONLY with valid JSON matching this schema. No markdown backticks, no pre
 
       const handleCopy=async()=>{try{await navigator.clipboard.writeText(buildOutput())}catch(e){const ta=document.createElement("textarea");ta.value=buildOutput();document.body.appendChild(ta);ta.select();document.execCommand("copy");document.body.removeChild(ta)}setCopied(true);setTimeout(()=>setCopied(false),2000)};
       const handleDownload=()=>{const b=new Blob([buildOutput()],{type:"text/plain"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="schematized_argument.txt";a.click()};
-      const handleClear=()=>{setBlocks([{id:uid(),supports:[{id:uid(),text:"",linkedFrom:null}],conclusion:""}]);setIq("");setRivals([""])};
+      const handleClear=()=>{setBlocks([{id:uid(),supports:[{id:uid(),text:"",linkedFrom:null}],conclusion:"",diagnostic:false}]);setIq("");setRivals([""])};
       const hasContent=blocks.some(b=>b.supports.some(s=>s.text.trim()||s.linkedFrom)||b.conclusion.trim())||iq.trim()||rivals.some(r=>r.trim());
 
       const linkableBlocks=cid=>{const gd=(bid,v=new Set())=>{if(v.has(bid))return v;v.add(bid);blocks.forEach(b=>{b.supports.forEach(s=>{if(s.linkedFrom===bid)gd(b.id,v)})});return v};const d=gd(cid);return blocks.filter(b=>b.id!==cid&&!d.has(b.id))};
@@ -644,7 +647,22 @@ Respond ONLY with valid JSON matching this schema. No markdown backticks, no pre
                 </div>
                 <AddBtn onClick={()=>addSupport(block.id)} label="Add support"/>
               </div>
-              <div style={{borderTop:"2.5px dashed #000000",margin:"20px 0"}}/>
+              <div style={{display:"flex",alignItems:"center",gap:10,margin:"20px 0"}}>
+                <div style={{flex:1}}>
+                  {block.diagnostic?(
+                    <>
+                      <div style={{display:"flex",alignItems:"center"}}><div style={{flex:1,borderTop:"2.5px dashed #000000"}}/><span style={{fontFamily:MF,fontSize:13,fontWeight:700,color:"#000",paddingLeft:4}}>d</span></div>
+                      <div style={{display:"flex",alignItems:"center",marginTop:3}}><div style={{flex:1,borderTop:"2.5px dashed #000000"}}/><span style={{fontFamily:MF,fontSize:13,fontWeight:700,color:"#000",paddingLeft:4,visibility:"hidden"}}>d</span></div>
+                    </>
+                  ):(
+                    <div style={{borderTop:"2.5px dashed #000000"}}/>
+                  )}
+                </div>
+                <label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",userSelect:"none",fontSize:12,color:block.diagnostic?"#e9171f":"#b4babc",fontWeight:600,transition:"color 0.15s",flexShrink:0}}>
+                  <input type="checkbox" checked={block.diagnostic} onChange={()=>toggleDiagnostic(block.id)} style={{accentColor:"#e9171f",width:13,height:13,cursor:"pointer"}}/>
+                  Diagnostic
+                </label>
+              </div>
               <div style={{marginBottom:20}}>
                 <span style={{...LS,display:"block",marginBottom:10}}>Conclusion</span>
                 <div style={{...CB,background:"#fff"}}>
@@ -713,7 +731,22 @@ Respond ONLY with valid JSON matching this schema. No markdown backticks, no pre
                     {block.supports.map((s,si)=>renderSupport(block,s,si,false))}
                   </div>
                   <AddBtn onClick={()=>addSupport(block.id)} label="Add support"/>
-                  <div style={{borderTop:"2.5px dashed #000000",margin:"14px 0"}}/>
+                  <div style={{display:"flex",alignItems:"center",gap:10,margin:"14px 0"}}>
+                    <div style={{flex:1}}>
+                      {block.diagnostic?(
+                        <>
+                          <div style={{display:"flex",alignItems:"center"}}><div style={{flex:1,borderTop:"2.5px dashed #000000"}}/><span style={{fontFamily:MF,fontSize:13,fontWeight:700,color:"#000",paddingLeft:4}}>d</span></div>
+                          <div style={{display:"flex",alignItems:"center",marginTop:3}}><div style={{flex:1,borderTop:"2.5px dashed #000000"}}/><span style={{fontFamily:MF,fontSize:13,fontWeight:700,color:"#000",paddingLeft:4,visibility:"hidden"}}>d</span></div>
+                        </>
+                      ):(
+                        <div style={{borderTop:"2.5px dashed #000000"}}/>
+                      )}
+                    </div>
+                    <label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",userSelect:"none",fontSize:12,color:block.diagnostic?"#e9171f":"#b4babc",fontWeight:600,transition:"color 0.15s",flexShrink:0}}>
+                      <input type="checkbox" checked={block.diagnostic} onChange={()=>toggleDiagnostic(block.id)} style={{accentColor:"#e9171f",width:13,height:13,cursor:"pointer"}}/>
+                      Diagnostic
+                    </label>
+                  </div>
                   <div style={{...CB,background:"#f8f7f4"}}>
                     <span style={{...ML,color:isMain?"#e9171f":"#d97706",minWidth:30}}>{cLabel}.</span>
                     <input type="text" value={block.conclusion} onChange={e=>updateConclusion(block.id,e.target.value)}
