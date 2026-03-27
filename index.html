@@ -461,7 +461,7 @@ Respond ONLY with valid JSON matching this schema. No markdown backticks, no pre
       const getGNums=()=>{let c=1;const m={};topoOrder.forEach(bid=>{const block=blocks.find(b=>b.id===bid);if(block)block.supports.forEach(s=>{m[s.id]=c++})});return m};
       const gNums=getGNums();
 
-      const mkSep=(mx,diag)=>diag?("=".repeat(mx-1)+"d\n"+"=".repeat(mx-1)+" "):"-".repeat(mx);
+      const mkSep=(mx,diag)=>diag?("=".repeat(mx-1)+"d"):"-".repeat(mx);
       const buildOutput=()=>{
         const gn=getGNums();const cL=getConcLabels();
         let core = "";
@@ -484,7 +484,7 @@ Respond ONLY with valid JSON matching this schema. No markdown backticks, no pre
               let skipId=null;if(oi>0){const prevBid=order[oi-1];const ls=block.supports.find(s=>s.linkedFrom===prevBid);if(ls)skipId=ls.id}
               block.supports.filter(s=>s.id!==skipId).forEach(s=>{const num=gn[s.id];let text=s.text;if(s.linkedFrom){const fb=blocks.find(b=>b.id===s.linkedFrom);const fl=cL[s.linkedFrom]||"?";text=(fb?.conclusion||`[${fl}]`)+` [= ${fl}]`}res.push(`${pad}S${num}. ${text}`)});
               const allSL=block.supports.map(s=>{const num=gn[s.id];let text=s.text;if(s.linkedFrom){const fb=blocks.find(b=>b.id===s.linkedFrom);const fl=cL[s.linkedFrom]||"?";text=(fb?.conclusion||`[${fl}]`)+` [= ${fl}]`}return`${pad}S${num}. ${text}`});
-              const cLine=`${pad}${cl}. ${block.conclusion}`;const allLines=[...allSL,cLine];const mx=Math.max(...allLines.map(l=>l.length),ci+10);const sepW=mx-ci;const sep=block.diagnostic?("=".repeat(sepW-1)+"d\n"+pad+"=".repeat(sepW-1)+" "):"-".repeat(sepW);res.push(pad+sep);
+              const cLine=`${pad}${cl}. ${block.conclusion}`;const allLines=[...allSL,cLine];const mx=Math.max(...allLines.map(l=>l.length),ci+10);const sepW=mx-ci;const sep=block.diagnostic?("=".repeat(sepW-1)+"d"):"-".repeat(sepW);res.push(pad+sep);
               if(oi<order.length-1){const nBid=order[oi+1];const nBlock=blocks.find(b=>b.id===nBid);const ls=nBlock?.supports.find(s=>s.linkedFrom===bid);if(ls){const arrow="  ------->  ";const ln=gn[ls.id];const ll=cL[bid];res.push(`${cLine}${arrow}S${ln}. ${block.conclusion} [= ${ll}]`);ci=cLine.length+arrow.length}else{res.push(cLine);res.push("")}}else{res.push(cLine)}
             }
             core = res.join("\n");
@@ -648,15 +648,9 @@ Respond ONLY with valid JSON matching this schema. No markdown backticks, no pre
                 <AddBtn onClick={()=>addSupport(block.id)} label="Add support"/>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:10,margin:"20px 0"}}>
-                <div style={{flex:1}}>
-                  {block.diagnostic?(
-                    <>
-                      <div style={{display:"flex",alignItems:"center"}}><div style={{flex:1,borderTop:"2.5px dashed #000000"}}/><span style={{fontFamily:MF,fontSize:13,fontWeight:700,color:"#000",paddingLeft:4}}>d</span></div>
-                      <div style={{display:"flex",alignItems:"center",marginTop:3}}><div style={{flex:1,borderTop:"2.5px dashed #000000"}}/><span style={{fontFamily:MF,fontSize:13,fontWeight:700,color:"#000",paddingLeft:4,visibility:"hidden"}}>d</span></div>
-                    </>
-                  ):(
-                    <div style={{borderTop:"2.5px dashed #000000"}}/>
-                  )}
+                <div style={{flex:1,display:"flex",alignItems:"center"}}>
+                  <div style={{flex:1,borderTop:block.diagnostic?"3px double #000000":"2.5px dashed #000000"}}/>
+                  {block.diagnostic&&<span style={{fontFamily:MF,fontSize:13,fontWeight:700,color:"#000",paddingLeft:4}}>d</span>}
                 </div>
                 <label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",userSelect:"none",fontSize:12,color:block.diagnostic?"#e9171f":"#b4babc",fontWeight:600,transition:"color 0.15s",flexShrink:0}}>
                   <input type="checkbox" checked={block.diagnostic} onChange={()=>toggleDiagnostic(block.id)} style={{accentColor:"#e9171f",width:13,height:13,cursor:"pointer"}}/>
@@ -732,15 +726,9 @@ Respond ONLY with valid JSON matching this schema. No markdown backticks, no pre
                   </div>
                   <AddBtn onClick={()=>addSupport(block.id)} label="Add support"/>
                   <div style={{display:"flex",alignItems:"center",gap:10,margin:"14px 0"}}>
-                    <div style={{flex:1}}>
-                      {block.diagnostic?(
-                        <>
-                          <div style={{display:"flex",alignItems:"center"}}><div style={{flex:1,borderTop:"2.5px dashed #000000"}}/><span style={{fontFamily:MF,fontSize:13,fontWeight:700,color:"#000",paddingLeft:4}}>d</span></div>
-                          <div style={{display:"flex",alignItems:"center",marginTop:3}}><div style={{flex:1,borderTop:"2.5px dashed #000000"}}/><span style={{fontFamily:MF,fontSize:13,fontWeight:700,color:"#000",paddingLeft:4,visibility:"hidden"}}>d</span></div>
-                        </>
-                      ):(
-                        <div style={{borderTop:"2.5px dashed #000000"}}/>
-                      )}
+                    <div style={{flex:1,display:"flex",alignItems:"center"}}>
+                      <div style={{flex:1,borderTop:block.diagnostic?"3px double #000000":"2.5px dashed #000000"}}/>
+                      {block.diagnostic&&<span style={{fontFamily:MF,fontSize:13,fontWeight:700,color:"#000",paddingLeft:4}}>d</span>}
                     </div>
                     <label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",userSelect:"none",fontSize:12,color:block.diagnostic?"#e9171f":"#b4babc",fontWeight:600,transition:"color 0.15s",flexShrink:0}}>
                       <input type="checkbox" checked={block.diagnostic} onChange={()=>toggleDiagnostic(block.id)} style={{accentColor:"#e9171f",width:13,height:13,cursor:"pointer"}}/>
