@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Schematized Argument Builder — Instructor's Edition</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #f8f7f4; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+    input:focus { outline: none; }
+    button:focus { outline: none; }
+    textarea:focus { outline: none; }
+    @keyframes shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useRef, useCallback } = React;
+
+    function uid() { return Math.random().toString(36).slice(2, 10); }
+    function letterLabel(i) { return String.fromCharCode(97 + i); }
+
+    /* ── Shared UI atoms ── */
+    function DragHandle() {
+      return (
+        <div style={{ display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"8px 4px",color:"#b4babc",flexShrink:0,cursor:"grab",userSelect:"none" }}>
+          <svg width="12" height="18" viewBox="0 0 12 18" fill="currentColor">
+            <circle cx="3" cy="3" r="1.5"/><circle cx="9" cy="3" r="1.5"/>
+            <circle cx="3" cy="9" r="1.5"/><circle cx="9" cy="9" r="1.5"/>
+            <circle cx="3" cy="15" r="1.5"/><circle cx="9" cy="15" r="1.5"/>
+          </svg>
+        </div>
+      );
+    }
+
+    function AddBtn({onClick,label}) {
+      return (
+        <button onClick={onClick} style={{display:"flex",alignItems:"center",gap:6,marginTop:8,padding:"8px 14px",background:"none",border:"1px dashed #b4babc",borderRadius:8,color:"#b4babc",fontSize:13,fontWeight:500,cursor:"pointer",fontFamily:"inherit"}}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor="#e9171f";e.currentTarget.style.color="#e9171f"}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor="#b4babc";e.currentTarget.style.color="#b4babc"}}>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="7" y1="2" x2="7" y2="12"/><line x1="2" y1="7" x2="12" y2="7"/></svg>
+          {label}
+        </button>
+      );
+    }
+
+    function ActBtns({copied,onCopy,onDownload,onClear,disabled}) {
+      return (
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <button onClick={onCopy} disabled={disabled} style={{display:"flex",alignItems:"center",gap:6,padding:"10px 18px",background:copied?"#fed184":"#e9171f",color:"#fff",border:"none",borderRadius:8,fontSize:14,fontWeight:600,cursor:disabled?"not-allowed":"pointer",opacity:disabled?0.4:1,fontFamily:"inherit",transition:"all 0.2s"}}>
+            {copied ? (<><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3,9 6,12 13,4"/></svg>Copied!</>) : (<><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M3 11V3a1.5 1.5 0 0 1 1.5-1.5H11"/></svg>Copy to Clipboard</>)}
+          </button>
+          <button onClick={onDownload} disabled={disabled} style={{display:"flex",alignItems:"center",gap:6,padding:"10px 18px",background:"#fff",color:"#000000",border:"1px solid #b4babc",borderRadius:8,fontSize:14,fontWeight:600,cursor:disabled?"not-allowed":"pointer",opacity:disabled?0.4:1,fontFamily:"inherit",transition:"all 0.2s"}}>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2v8m0 0l-3-3m3 3l3-3"/><path d="M2 12v1.5a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V12"/></svg>
+            Download .txt
+          </button>
+          <button onClick={onClear} style={{display:"flex",alignItems:"center",gap:6,padding:"10px 18px",background:"none",color:"#b4babc",border:"1px solid #d8dbdc",borderRadius:8,fontSize:14,fontWeight:500,cursor:"pointer",fontFamily:"inherit",marginLeft:"auto",transition:"all 0.15s"}}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor="#e9171f";e.currentTarget.style.color="#e9171f"}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor="#d8dbdc";e.currentTarget.style.color="#b4babc"}}>
+            Clear All
+          </button>
+        </div>
+      );
+    }
+
+    const LS={fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.8px",color:"#b4babc"};
+    const ML={fontFamily:"'SF Mono','Fira Code','Consolas',monospace",fontSize:14,fontWeight:600,flexShrink:0,userSelect:"none"};
+    const IS={flex:1,border:"none",outline:"none",fontSize:15,padding:"10px 4px",background:"transparent",color:"#000000",fontFamily:"'Segoe UI',system-ui,-apple-system,sans-serif"};
+    const CB={display:"flex",alignItems:"center",gap:8,borderRadius:8,border:"1px solid #d8dbdc",padding:"2px 12px 2px 14px"};
+    const XB={background:"none",border:"none",cursor:"pointer",color:"#c0bfcf",padding:4,borderRadius:4,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"color 0.15s"};
+    const SB={fontSize:12,color:"#b4babc",background:"none",border:"1px solid #d8dbdc",borderRadius:6,padding:"3px 10px",cursor:"pointer",fontFamily:"inherit",transition:"all 0.15s"};
+    const MF="'SF Mono','Fira Code','Consolas',monospace";
+
+    /* ─────────────────────────────────────────────────
+       IBE SYSTEM PROMPT
+       ───────────────────────────────────────────────── */
+    const IBE_SYSTEM_PROMPT = `You are an expert philosophy instructor specializing in abductive reasoning and Inference to the Best Explanation (IBE). Your task is to extract a schematized IBE argument from the provided narrative text.
+
+AN IBE ARGUMENT HAS THIS STRUCTURE:
+1. SUPPORT STATEMENTS (S1, S2, S3...): Factual claims paraphrased from the narrative. These are the observable evidence — the facts that need explaining. Each should be a clear, declarative sentence. Do NOT directly quote the text; paraphrase into crisp, standalone claims.
+2. CONCLUSION (C1): The author's main conclusion — the explanation they endorse as best accounting for the evidence.
+3. INVESTIGATIVE QUESTION (IQ): The question that the evidence raises and that the conclusion answers. Phrased as a question. Examples: "Why did the helicopter crash?", "What was the fireball?", "How did she get hurt?"
+4. RIVAL CONCLUSIONS (C2, C3...): Alternative explanations that compete with C1. These are other possible answers to the IQ. They should be plausible but ultimately less well-supported than C1. Typically 2–3 rivals.
+
+RULES FOR SUPPORT STATEMENTS:
+- Paraphrase; never directly quote the source text.
+- Each support should be a single, clear, declarative factual claim.
+- Order them as they naturally appear in the narrative.
+- Include ALL evidentially relevant facts from the text — background context, forensic details, witness observations, expert findings, statistical data, timeline facts, etc.
+- Let the number of supports be determined by what the text contains. A short paragraph might yield 3–4; a longer article might yield 7+.
+- Do NOT label or categorize the supports (no "Trace Data" or "Explanatory Hurdle" labels — that classification is for classroom discussion).
+
+RULES FOR THE CONCLUSION:
+- C1 is the explanation the author endorses or that the text presents as the best explanation.
+- State it as a declarative sentence, not a question.
+
+RULES FOR THE IQ:
+- The IQ is the central question the evidence raises.
+- It should be answerable by C1 and by each rival.
+- Keep it short and natural.
+
+RULES FOR RIVALS:
+- Provide 2–3 plausible competing explanations.
+- Each rival should be a genuine alternative answer to the IQ.
+- They can be explanations the text mentions OR reasonable alternatives the text doesn't mention.
+- State each as a short declarative sentence.
+
+EXAMPLE INPUT:
+"On the evening of January 24, 1978, several residents of a barren area of the Northwest Territories reported a spectacular fireball over Baker Lake..."
+
+EXAMPLE OUTPUT:
+{"supports":["Residents observed a fireball over Baker Lake on the evening of January 24, 1978.","U.S. tracking stations had been warning that a Soviet satellite had dropped dangerously low in its orbit.","The Soviet satellite contained a nuclear reactor.","The satellite's orbit would have carried it over northern Canada around the time of the fireball sighting.","The Soviet government admitted losing a nuclear-powered satellite shortly after the event.","Geologists discovered radioactive debris of human fabrication in a crater on the ice near Baker Lake.","The debris was found protruding from a crater in the ice, consistent with an impact event."],"conclusion":"The fireball was the Soviet satellite re-entering the atmosphere and breaking apart over Baker Lake.","iq":"What was the fireball observed over Baker Lake?","rivals":["The fireball was a natural astronomical event such as a meteor or bolide.","The fireball was caused by a missile test or military weapon.","The fireball was from another country's satellite or space debris."]}
+
+Respond ONLY with valid JSON matching this schema. No markdown backticks, no preamble, no commentary.
+{"supports":["...","..."],"conclusion":"...","iq":"...","rivals":["...","..."]}`;
+
+
+    /* ─────────────────────────────────────────────────
+       AI Extraction Panel
+       ───────────────────────────────────────────────── */
+    function ExtractionPanel({ onExtracted }) {
+      const [text, setText] = useState("");
+      const [loading, setLoading] = useState(false);
+      const [error, setError] = useState(null);
+      const [collapsed, setCollapsed] = useState(false);
+      const [customPrompt, setCustomPrompt] = useState("");
+      const [showCustom, setShowCustom] = useState(false);
+      const [apiKey, setApiKey] = useState("");
+      const [showKey, setShowKey] = useState(false);
+
+      const extract = useCallback(async () => {
+        if (!text.trim()) return;
+        if (!apiKey.trim()) {
+          setError("Please enter your Anthropic API key above.");
+          return;
+        }
+        setLoading(true);
+        setError(null);
+
+        const sysPrompt = customPrompt.trim()
+          ? IBE_SYSTEM_PROMPT + `\n\nADDITIONAL INSTRUCTOR GUIDANCE: ${customPrompt.trim()}`
+          : IBE_SYSTEM_PROMPT;
+
+        try {
+          const response = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-api-key": apiKey.trim(),
+              "anthropic-version": "2023-06-01",
+              "anthropic-dangerous-direct-browser-access": "true",
+            },
+            body: JSON.stringify({
+              model: "claude-sonnet-4-20250514",
+              max_tokens: 1500,
+              system: sysPrompt,
+              messages: [{ role: "user", content: text.trim() }],
+            }),
+          });
+
+          if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData?.error?.message || `API error: ${response.status}`);
+          }
+
+          const data = await response.json();
+          const raw = data.content
+            .filter(c => c.type === "text")
+            .map(c => c.text)
+            .join("");
+
+          const cleaned = raw.replace(/```json|```/g, "").trim();
+          const parsed = JSON.parse(cleaned);
+          onExtracted(parsed);
+          setCollapsed(true);
+        } catch (err) {
+          console.error("Extraction error:", err);
+          setError(err.message || "Failed to extract argument. Please try again.");
+        } finally {
+          setLoading(false);
+        }
+      }, [text, customPrompt, apiKey, onExtracted]);
+
+      const charCount = text.length;
+
+      return (
+        <div style={{
+          background: "#fff",
+          border: "2px solid #1a1a2e",
+          borderRadius: 12,
+          marginBottom: 20,
+          overflow: "hidden",
+          transition: "all 0.3s ease",
+        }}>
+          {/* Header */}
+          <div
+            onClick={() => setCollapsed(!collapsed)}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "12px 18px",
+              background: "linear-gradient(135deg, #1a1a2e 0%, #2d2d44 100%)",
+              cursor: "pointer", userSelect: "none",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <rect x="2" y="2" width="16" height="16" rx="3" stroke="#fed184" strokeWidth="1.5"/>
+                <path d="M6 7h8M6 10h6M6 13h4" stroke="#fed184" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+              <span style={{ color: "#fed184", fontSize: 14, fontWeight: 700, letterSpacing: "0.5px", textTransform: "uppercase" }}>
+                IBE Argument Extractor
+              </span>
+              <span style={{
+                background: "rgba(254,209,132,0.15)", color: "#fed184",
+                fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 10,
+                letterSpacing: "0.5px", textTransform: "uppercase",
+              }}>Instructor</span>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#fed184" strokeWidth="2" strokeLinecap="round"
+              style={{ transform: collapsed ? "rotate(0deg)" : "rotate(180deg)", transition: "transform 0.2s" }}>
+              <polyline points="4,6 8,10 12,6"/>
+            </svg>
+          </div>
+
+          {/* Body */}
+          {!collapsed && (
+            <div style={{ padding: "16px 18px", animation: "fadeIn 0.2s ease" }}>
+              {/* API Key */}
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.8px", color: "#b4babc" }}>API Key</span>
+                  {apiKey && (
+                    <span style={{ fontSize: 10, color: "#16a34a", background: "#f0fdf4", padding: "1px 6px", borderRadius: 4, fontWeight: 600 }}>Connected</span>
+                  )}
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input
+                    type={showKey ? "text" : "password"}
+                    value={apiKey}
+                    onChange={e => setApiKey(e.target.value)}
+                    placeholder="sk-ant-..."
+                    style={{
+                      flex: 1, padding: "8px 12px",
+                      border: "1px solid #d8dbdc", borderRadius: 8, fontSize: 13,
+                      fontFamily: "'SF Mono','Fira Code','Consolas',monospace",
+                      color: "#333", background: "#fafaf8", outline: "none",
+                    }}
+                  />
+                  <button onClick={() => setShowKey(!showKey)} style={{
+                    padding: "8px 10px", background: "#fff", border: "1px solid #d8dbdc",
+                    borderRadius: 8, cursor: "pointer", color: "#b4babc", fontSize: 11,
+                    fontFamily: "inherit", fontWeight: 500,
+                  }}>
+                    {showKey ? "Hide" : "Show"}
+                  </button>
+                </div>
+                <p style={{ fontSize: 11, color: "#b4babc", marginTop: 4, lineHeight: 1.4 }}>
+                  Your key stays in-browser and is never stored. Get one at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener" style={{ color: "#e9171f", textDecoration: "none" }}>console.anthropic.com</a>
+                </p>
+              </div>
+
+              {/* Textarea */}
+              <div style={{ position: "relative", marginBottom: 10 }}>
+                <textarea
+                  value={text}
+                  onChange={e => setText(e.target.value)}
+                  placeholder="Paste a narrative, news article, case study, or any text containing an argument from evidence to explanation..."
+                  style={{
+                    width: "100%", minHeight: 160, padding: "14px 16px", paddingBottom: 32,
+                    border: "1px solid #d8dbdc", borderRadius: 10, fontSize: 14,
+                    fontFamily: "'Segoe UI',system-ui,-apple-system,sans-serif",
+                    lineHeight: 1.6, resize: "vertical", color: "#333",
+                    background: "#fafaf8", outline: "none",
+                    transition: "border-color 0.2s",
+                  }}
+                  onFocus={e => e.target.style.borderColor = "#1a1a2e"}
+                  onBlur={e => e.target.style.borderColor = "#d8dbdc"}
+                />
+                <span style={{
+                  position: "absolute", bottom: 10, right: 14,
+                  fontSize: 11, color: "#b4babc",
+                }}>{charCount.toLocaleString()} chars</span>
+              </div>
+
+              {/* Custom prompt toggle */}
+              <div style={{ marginBottom: 12 }}>
+                <button onClick={() => setShowCustom(!showCustom)} style={{
+                  background: "none", border: "none", cursor: "pointer",
+                  fontSize: 12, color: "#b4babc", fontFamily: "inherit",
+                  display: "flex", alignItems: "center", gap: 4,
+                }}>
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"
+                    style={{ transform: showCustom ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s" }}>
+                    <polyline points="4,2 8,6 4,10"/>
+                  </svg>
+                  Custom extraction guidance
+                </button>
+                {showCustom && (
+                  <input
+                    type="text"
+                    value={customPrompt}
+                    onChange={e => setCustomPrompt(e.target.value)}
+                    placeholder='e.g., "The IQ is about what caused the fire" or "Include the timeline details as supports"'
+                    style={{
+                      width: "100%", marginTop: 6, padding: "8px 12px",
+                      border: "1px solid #d8dbdc", borderRadius: 8, fontSize: 13,
+                      fontFamily: "inherit", color: "#333", background: "#fff", outline: "none",
+                    }}
+                  />
+                )}
+              </div>
+
+              {/* Extract button */}
+              <button
+                onClick={extract}
+                disabled={!text.trim() || loading || !apiKey.trim()}
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                  width: "100%", padding: "12px",
+                  background: loading
+                    ? "linear-gradient(90deg, #1a1a2e 0%, #3d3d5c 50%, #1a1a2e 100%)"
+                    : "linear-gradient(135deg, #1a1a2e 0%, #2d2d44 100%)",
+                  backgroundSize: loading ? "200% 100%" : "100% 100%",
+                  animation: loading ? "shimmer 1.5s ease infinite" : "none",
+                  color: "#fed184", border: "none", borderRadius: 10,
+                  fontSize: 14, fontWeight: 700,
+                  cursor: (!text.trim() || loading || !apiKey.trim()) ? "not-allowed" : "pointer",
+                  opacity: (!text.trim() || !apiKey.trim()) && !loading ? 0.5 : 1,
+                  fontFamily: "inherit", letterSpacing: "0.3px",
+                  transition: "all 0.2s",
+                }}
+              >
+                {loading ? (
+                  <>
+                    <svg width="16" height="16" viewBox="0 0 16 16" style={{ animation: "spin 1s linear infinite" }}>
+                      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+                      <circle cx="8" cy="8" r="6" fill="none" stroke="#fed184" strokeWidth="2" strokeDasharray="28" strokeDashoffset="8" strokeLinecap="round"/>
+                    </svg>
+                    Extracting IBE argument...
+                  </>
+                ) : (
+                  <>
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M2 4l5 4-5 4"/>
+                      <path d="M9 4l5 4-5 4"/>
+                    </svg>
+                    Extract IBE Argument
+                  </>
+                )}
+              </button>
+
+              {error && (
+                <div style={{
+                  marginTop: 10, padding: "10px 14px", borderRadius: 8,
+                  background: "#fef2f2", border: "1px solid #fca5a5",
+                  fontSize: 13, color: "#991b1b", lineHeight: 1.5,
+                }}>
+                  {error}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+
+    /* ─────────────────────────────────────────────────
+       Main App
+       ───────────────────────────────────────────────── */
+    function App() {
+      const [blocks,setBlocks]=useState([{id:uid(),supports:[{id:uid(),text:"",linkedFrom:null}],conclusion:""}]);
+      const [copied,setCopied]=useState(false);
+      const iRefs=useRef({});
+      const isSimple=blocks.length===1;
+
+      // IBE-specific state
+      const [iq, setIq] = useState("");
+      const [rivals, setRivals] = useState([""]);
+
+      /* ── AI extraction handler ── */
+      const handleExtracted = useCallback((parsed) => {
+        if (!parsed) return;
+
+        // Build supports
+        const supports = (parsed.supports || []).map(s => ({
+          id: uid(),
+          text: typeof s === "string" ? s : "",
+          linkedFrom: null,
+        }));
+        if (supports.length === 0) {
+          supports.push({ id: uid(), text: "", linkedFrom: null });
+        }
+
+        const newBlock = {
+          id: uid(),
+          supports,
+          conclusion: parsed.conclusion || "",
+        };
+        setBlocks([newBlock]);
+
+        // Set IBE fields
+        setIq(parsed.iq || "");
+        setRivals(
+          (parsed.rivals && parsed.rivals.length > 0)
+            ? parsed.rivals
+            : [""]
+        );
+      }, []);
+
+      // Rival management
+      const addRival = () => setRivals(p => [...p, ""]);
+      const updateRival = (i, t) => setRivals(p => p.map((r, ri) => ri === i ? t : r));
+      const removeRival = (i) => { if (rivals.length > 1) setRivals(p => p.filter((_, ri) => ri !== i)); };
+
+      const addBlock=()=>setBlocks(p=>[...p,{id:uid(),supports:[{id:uid(),text:"",linkedFrom:null}],conclusion:""}]);
+      const removeBlock=bid=>{if(blocks.length===1)return;setBlocks(p=>p.filter(b=>b.id!==bid).map(b=>({...b,supports:b.supports.map(s=>s.linkedFrom===bid?{...s,linkedFrom:null,text:""}:s)})))};
+      const addSupport=bid=>{const n={id:uid(),text:"",linkedFrom:null};setBlocks(p=>p.map(b=>b.id===bid?{...b,supports:[...b.supports,n]}:b));setTimeout(()=>iRefs.current[n.id]?.focus(),50)};
+      const updateSupport=(bid,sid,t)=>setBlocks(p=>p.map(b=>b.id===bid?{...b,supports:b.supports.map(s=>s.id===sid?{...s,text:t}:s)}:b));
+      const removeSupport=(bid,sid)=>setBlocks(p=>p.map(b=>{if(b.id!==bid||b.supports.length===1)return b;return{...b,supports:b.supports.filter(s=>s.id!==sid)}}));
+      const toggleLink=(bid,sid,fromBid)=>setBlocks(p=>p.map(b=>{if(b.id!==bid)return b;return{...b,supports:b.supports.map(s=>{if(s.id!==sid)return s;return s.linkedFrom===fromBid?{...s,linkedFrom:null,text:""}:{...s,linkedFrom:fromBid}})}}));
+      const updateConclusion=(bid,t)=>setBlocks(p=>p.map(b=>b.id===bid?{...b,conclusion:t}:b));
+      const handleKeyDown=(e,bid)=>{if(e.key==="Enter"){e.preventDefault();addSupport(bid)}};
+      const handleKeyDownSimple=(e,bid,sid,idx)=>{
+        if(e.key==="Enter"){e.preventDefault();addSupport(bid)}
+        const block=blocks.find(b=>b.id===bid);
+        if(e.key==="Backspace"&&block){const s=block.supports.find(s=>s.id===sid);if(s?.text===""&&block.supports.length>1){e.preventDefault();removeSupport(bid,sid);const pi=Math.max(0,idx-1);const pid=block.supports[pi]?.id;if(pid&&pid!==sid)setTimeout(()=>iRefs.current[pid]?.focus(),50)}}
+      };
+
+      const [dragS,setDragS]=useState({bid:null,i:null});
+      const [dragOS,setDragOS]=useState({bid:null,i:null});
+      const hdS=(e,bid,i)=>{setDragS({bid,i});e.dataTransfer.effectAllowed="move"};
+      const hdO=(e,bid,i)=>{e.preventDefault();setDragOS({bid,i})};
+      const hdL=()=>setDragOS({bid:null,i:null});
+      const hdD=(e,bid,di)=>{e.preventDefault();if(dragS.bid!==bid||dragS.i===null||dragS.i===di){setDragS({bid:null,i:null});setDragOS({bid:null,i:null});return}setBlocks(p=>p.map(b=>{if(b.id!==bid)return b;const u=[...b.supports];const[m]=u.splice(dragS.i,1);u.splice(di,0,m);return{...b,supports:u}}));setDragS({bid:null,i:null});setDragOS({bid:null,i:null})};
+      const hdE=()=>{setDragS({bid:null,i:null});setDragOS({bid:null,i:null})};
+
+      const hasAnyLinks=blocks.some(b=>b.supports.some(s=>s.linkedFrom!==null));
+      const getMainBlockId=()=>{if(!hasAnyLinks)return null;const linked=new Set();blocks.forEach(b=>{b.supports.forEach(s=>{if(s.linkedFrom)linked.add(s.linkedFrom)})});const cands=blocks.filter(b=>!linked.has(b.id));if(cands.length===0)return blocks[blocks.length-1].id;return cands[cands.length-1].id};
+      const mainBlockId=getMainBlockId();
+
+      const getConcLabels=()=>{const L={};if(isSimple){L[blocks[0].id]="C1";return L}let ti=0;blocks.forEach(b=>{if(b.id===mainBlockId){L[b.id]="C1"}else{L[b.id]=`C1${letterLabel(ti)}`;ti++}});return L};
+      const concLabels=getConcLabels();
+
+      const getTopoOrder=()=>{const deps={};blocks.forEach(b=>{deps[b.id]=[]});blocks.forEach(b=>{b.supports.forEach(s=>{if(s.linkedFrom&&deps[b.id])deps[b.id].push(s.linkedFrom)})});const vis=new Set();const ord=[];const visit=id=>{if(vis.has(id))return;vis.add(id);(deps[id]||[]).forEach(visit);ord.push(id)};blocks.forEach(b=>visit(b.id));return ord};
+      const topoOrder=isSimple?[blocks[0].id]:getTopoOrder();
+
+      const getGNums=()=>{let c=1;const m={};topoOrder.forEach(bid=>{const block=blocks.find(b=>b.id===bid);if(block)block.supports.forEach(s=>{m[s.id]=c++})});return m};
+      const gNums=getGNums();
+
+      const buildOutput=()=>{
+        const gn=getGNums();const cL=getConcLabels();
+        let core = "";
+
+        if(isSimple){
+          const block=blocks[0];
+          const sL=block.supports.map(s=>`S${gn[s.id]}. ${s.text}`);
+          const cLine=`C1. ${block.conclusion}`;
+          const all=[...sL,cLine];
+          const mx=Math.max(...all.map(l=>l.length),10);
+          core = [...sL,"-".repeat(mx),cLine].join("\n");
+        } else {
+          const order=getTopoOrder();
+          const isLinear=()=>{if(order.length<=1)return true;for(const bid of order){let fc=0;blocks.forEach(b=>{b.supports.forEach(s=>{if(s.linkedFrom===bid)fc++})});if(fc>1)return false}return true};
+          if(isLinear()&&order.length>1){
+            const res=[];let ci=0;
+            for(let oi=0;oi<order.length;oi++){
+              const bid=order[oi];const block=blocks.find(b=>b.id===bid);if(!block)continue;
+              const cl=cL[bid];const pad=" ".repeat(ci);
+              let skipId=null;if(oi>0){const prevBid=order[oi-1];const ls=block.supports.find(s=>s.linkedFrom===prevBid);if(ls)skipId=ls.id}
+              block.supports.filter(s=>s.id!==skipId).forEach(s=>{const num=gn[s.id];let text=s.text;if(s.linkedFrom){const fb=blocks.find(b=>b.id===s.linkedFrom);const fl=cL[s.linkedFrom]||"?";text=(fb?.conclusion||`[${fl}]`)+` [= ${fl}]`}res.push(`${pad}S${num}. ${text}`)});
+              const allSL=block.supports.map(s=>{const num=gn[s.id];let text=s.text;if(s.linkedFrom){const fb=blocks.find(b=>b.id===s.linkedFrom);const fl=cL[s.linkedFrom]||"?";text=(fb?.conclusion||`[${fl}]`)+` [= ${fl}]`}return`${pad}S${num}. ${text}`});
+              const cLine=`${pad}${cl}. ${block.conclusion}`;const allLines=[...allSL,cLine];const mx=Math.max(...allLines.map(l=>l.length),ci+10);res.push(pad+"-".repeat(mx-ci));
+              if(oi<order.length-1){const nBid=order[oi+1];const nBlock=blocks.find(b=>b.id===nBid);const ls=nBlock?.supports.find(s=>s.linkedFrom===bid);if(ls){const arrow="  ------->  ";const ln=gn[ls.id];const ll=cL[bid];res.push(`${cLine}${arrow}S${ln}. ${block.conclusion} [= ${ll}]`);ci=cLine.length+arrow.length}else{res.push(cLine);res.push("")}}else{res.push(cLine)}
+            }
+            core = res.join("\n");
+          } else {
+            const res=[];
+            for(let oi=0;oi<order.length;oi++){
+              const bid=order[oi];const block=blocks.find(b=>b.id===bid);if(!block)continue;const cl=cL[bid];if(oi>0)res.push("");
+              const sLines=block.supports.map(s=>{const num=gn[s.id];let text=s.text;if(s.linkedFrom){const fb=blocks.find(b=>b.id===s.linkedFrom);const fl=cL[s.linkedFrom]||"?";text=(fb?.conclusion||`[${fl}]`)+` [= ${fl}]`}return`S${num}. ${text}`});
+              const cLine=`${cl}. ${block.conclusion}`;const allLines=[...sLines,cLine];const mx=Math.max(...allLines.map(l=>l.length),10);
+              sLines.forEach(l=>res.push(l));res.push("-".repeat(mx));
+              let feedsInto=null;blocks.forEach(b=>{b.supports.forEach(s=>{if(s.linkedFrom===bid)feedsInto={tid:b.id,sid:s.id}})});
+              if(feedsInto){const tl=cL[feedsInto.tid];const tn=gn[feedsInto.sid];const isM=feedsInto.tid===mainBlockId;res.push(`${cLine}  -------> S${tn} of ${isM?"Main Argument":`Argument ${tl}`}`)}else{res.push(cLine)}
+            }
+            core = res.join("\n");
+          }
+        }
+
+        // Append IBE fields
+        const ibeLines = [];
+        if (iq.trim()) {
+          ibeLines.push("", `IQ: ${iq}`);
+        }
+        const filledRivals = rivals.filter(r => r.trim());
+        if (filledRivals.length > 0) {
+          ibeLines.push("", "Rivals:");
+          filledRivals.forEach((r, i) => {
+            ibeLines.push(`C${i + 2}. ${r}`);
+          });
+        }
+
+        return core + ibeLines.join("\n");
+      };
+
+      const handleCopy=async()=>{try{await navigator.clipboard.writeText(buildOutput())}catch(e){const ta=document.createElement("textarea");ta.value=buildOutput();document.body.appendChild(ta);ta.select();document.execCommand("copy");document.body.removeChild(ta)}setCopied(true);setTimeout(()=>setCopied(false),2000)};
+      const handleDownload=()=>{const b=new Blob([buildOutput()],{type:"text/plain"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="schematized_argument.txt";a.click()};
+      const handleClear=()=>{setBlocks([{id:uid(),supports:[{id:uid(),text:"",linkedFrom:null}],conclusion:""}]);setIq("");setRivals([""])};
+      const hasContent=blocks.some(b=>b.supports.some(s=>s.text.trim()||s.linkedFrom)||b.conclusion.trim())||iq.trim()||rivals.some(r=>r.trim());
+
+      const linkableBlocks=cid=>{const gd=(bid,v=new Set())=>{if(v.has(bid))return v;v.add(bid);blocks.forEach(b=>{b.supports.forEach(s=>{if(s.linkedFrom===bid)gd(b.id,v)})});return v};const d=gd(cid);return blocks.filter(b=>b.id!==cid&&!d.has(b.id))};
+
+      const XIcon=<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>;
+      const ArrowIcon=<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#e9171f" strokeWidth="1.5" strokeLinecap="round" style={{flexShrink:0}}><path d="M1 7h12M9 3l4 4-4 4"/></svg>;
+
+      // ── Render support row ──
+      const renderSupport=(block,s,si,simple)=>{
+        const gNum=gNums[s.id];const isLinked=s.linkedFrom!==null;
+        const linkedBlock=isLinked?blocks.find(b=>b.id===s.linkedFrom):null;
+        const linkedCLabel=isLinked?concLabels[s.linkedFrom]:"";
+        const avail=linkableBlocks(block.id);
+        return (
+          <div key={s.id} style={{display:"flex",flexDirection:"column",gap:4}}>
+            <div draggable onDragStart={e=>hdS(e,block.id,si)} onDragOver={e=>hdO(e,block.id,si)} onDragLeave={hdL} onDrop={e=>hdD(e,block.id,si)} onDragEnd={hdE}
+              style={{display:"flex",alignItems:"center",gap:8,background:dragS.bid===block.id&&dragS.i===si?"#fff8e8":simple?"#fff":"#f8f7f4",borderRadius:8,border:dragOS.bid===block.id&&dragOS.i===si&&dragS.i!==si?"2px dashed #e9171f":"1px solid "+(simple?"#d8dbdc":"#eceaef"),padding:"2px 8px 2px 2px",opacity:dragS.bid===block.id&&dragS.i===si?0.5:1,cursor:"grab"}}>
+              <DragHandle/>
+              <span style={{...ML,color:"#e9171f",minWidth:simple?30:36}}>S{gNum}.</span>
+              {isLinked ? (
+                <div style={{flex:1,padding:"10px 4px",fontSize:14,color:"#e9171f",display:"flex",alignItems:"center",gap:6,minWidth:0}}>
+                  {ArrowIcon}
+                  <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                    {linkedBlock?.conclusion||`[${linkedCLabel}]`}
+                    <span style={{color:"#b4babc",fontWeight:600,marginLeft:4,fontSize:12}}>[= {linkedCLabel}]</span>
+                  </span>
+                </div>
+              ) : (
+                <input ref={el=>(iRefs.current[s.id]=el)} type="text" value={s.text}
+                  onChange={e=>updateSupport(block.id,s.id,e.target.value)}
+                  onKeyDown={e=>simple?handleKeyDownSimple(e,block.id,s.id,si):handleKeyDown(e,block.id)}
+                  placeholder="Enter a support statement..." style={IS}/>
+              )}
+              {block.supports.length>1&&(
+                <button onClick={()=>removeSupport(block.id,s.id)} style={XB}
+                  onMouseEnter={e=>(e.currentTarget.style.color="#e9171f")}
+                  onMouseLeave={e=>(e.currentTarget.style.color="#c0bfcf")}>{XIcon}</button>
+              )}
+            </div>
+            {!isSimple&&avail.length>0&&!isLinked&&(
+              <div style={{display:"flex",gap:4,paddingLeft:52,flexWrap:"wrap"}}>
+                {avail.map(lb=>(
+                  <button key={lb.id} onClick={()=>toggleLink(block.id,s.id,lb.id)} style={{fontSize:11,color:"#b4babc",background:"none",border:"1px dashed #b4babc",borderRadius:4,padding:"2px 8px",cursor:"pointer",fontFamily:"inherit",transition:"all 0.15s"}}
+                    onMouseEnter={e=>{e.currentTarget.style.borderColor="#e9171f";e.currentTarget.style.color="#e9171f"}}
+                    onMouseLeave={e=>{e.currentTarget.style.borderColor="#b4babc";e.currentTarget.style.color="#b4babc"}}>
+                    ← Link {concLabels[lb.id]}
+                  </button>
+                ))}
+              </div>
+            )}
+            {!isSimple&&isLinked&&(
+              <div style={{paddingLeft:52}}>
+                <button onClick={()=>toggleLink(block.id,s.id,s.linkedFrom)} style={{fontSize:11,color:"#e9171f",background:"none",border:"1px dashed #f0c0c0",borderRadius:4,padding:"2px 8px",cursor:"pointer",fontFamily:"inherit"}}>Unlink</button>
+              </div>
+            )}
+          </div>
+        );
+      };
+
+      // ── IBE Fields (shared between simple and complex views) ──
+      const renderIBEFields = () => (
+        <div style={{ marginBottom: 28 }}>
+          {/* IQ */}
+          <div style={{ marginBottom: 16 }}>
+            <span style={{...LS, display: "block", marginBottom: 10}}>Investigative Question</span>
+            <div style={{...CB, background: "#fff"}}>
+              <span style={{...ML, color: "#d97706", minWidth: 30}}>IQ.</span>
+              <input type="text" value={iq} onChange={e => setIq(e.target.value)}
+                placeholder="What question does the evidence raise? e.g., Why did the helicopter crash?"
+                style={IS}/>
+            </div>
+          </div>
+
+          {/* Rivals */}
+          <div>
+            <span style={{...LS, display: "block", marginBottom: 10}}>Rival Conclusions</span>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {rivals.map((r, i) => (
+                <div key={i} style={{...CB, background: "#fff"}}>
+                  <span style={{...ML, color: "#6b7280", minWidth: 36}}>C{i + 2}.</span>
+                  <input type="text" value={r} onChange={e => updateRival(i, e.target.value)}
+                    placeholder={`Rival explanation ${i + 1}...`}
+                    style={IS}/>
+                  {rivals.length > 1 && (
+                    <button onClick={() => removeRival(i)} style={XB}
+                      onMouseEnter={e => (e.currentTarget.style.color = "#e9171f")}
+                      onMouseLeave={e => (e.currentTarget.style.color = "#c0bfcf")}>{XIcon}</button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <AddBtn onClick={addRival} label="Add rival"/>
+          </div>
+        </div>
+      );
+
+      // ── SIMPLE ──
+      if(isSimple){
+        const block=blocks[0];const filled=block.supports.filter(s=>s.text.trim()).length;const hasC=block.conclusion.trim().length>0;
+        return (
+          <div style={{minHeight:"100vh",background:"#f8f7f4",fontFamily:"'Segoe UI',system-ui,-apple-system,sans-serif",padding:"24px 16px",boxSizing:"border-box"}}>
+            <div style={{maxWidth:720,margin:"0 auto"}}>
+              <div style={{marginBottom:20}}>
+                <h1 style={{fontSize:22,fontWeight:700,color:"#000000",margin:"0 0 4px 0",letterSpacing:"-0.3px"}}>
+                  Schematized Argument Builder
+                  <span style={{
+                    fontSize:10, fontWeight:700, color:"#fed184", background:"#1a1a2e",
+                    padding:"3px 8px", borderRadius:6, marginLeft:10, verticalAlign:"middle",
+                    letterSpacing:"0.5px", textTransform:"uppercase",
+                  }}>Instructor · IBE</span>
+                </h1>
+                <p style={{fontSize:14,color:"#b4babc",margin:0,lineHeight:1.5}}>Paste text to auto-extract an IBE argument, or build manually. Drag to reorder.</p>
+              </div>
+
+              <ExtractionPanel onExtracted={handleExtracted} />
+
+              <div style={{marginBottom:4}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+                  <span style={LS}>Support Statements</span>
+                  <span style={{fontSize:12,color:"#b4babc"}}>{filled} statement{filled!==1?"s":""}</span>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                  {block.supports.map((s,i)=>renderSupport(block,s,i,true))}
+                </div>
+                <AddBtn onClick={()=>addSupport(block.id)} label="Add support"/>
+              </div>
+              <div style={{borderTop:"2.5px dashed #000000",margin:"20px 0"}}/>
+              <div style={{marginBottom:20}}>
+                <span style={{...LS,display:"block",marginBottom:10}}>Conclusion</span>
+                <div style={{...CB,background:"#fff"}}>
+                  <span style={{...ML,color:"#e9171f"}}>C1.</span>
+                  <input type="text" value={block.conclusion} onChange={e=>updateConclusion(block.id,e.target.value)} placeholder="Enter the best explanation (author's conclusion)..." style={IS}/>
+                </div>
+              </div>
+
+              {renderIBEFields()}
+
+              {hasContent&&(
+                <div style={{background:"#fff",border:"1px solid #d8dbdc",borderRadius:10,padding:"18px 20px",marginBottom:20}}>
+                  <span style={{...LS,display:"block",marginBottom:12}}>Preview</span>
+                  <pre style={{fontFamily:MF,fontSize:14,lineHeight:1.7,color:"#000000",margin:0,whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{buildOutput()}</pre>
+                </div>
+              )}
+              <ActBtns copied={copied} onCopy={handleCopy} onDownload={handleDownload} onClear={handleClear} disabled={!hasContent}/>
+              <div style={{marginTop:24,borderTop:"1px solid #d8dbdc",paddingTop:20}}>
+                <button onClick={addBlock} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"100%",padding:"12px",background:"none",border:"2px dashed #b4babc",borderRadius:12,color:"#b4babc",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"inherit",transition:"all 0.15s"}}
+                  onMouseEnter={e=>{e.currentTarget.style.borderColor="#e9171f";e.currentTarget.style.color="#e9171f"}}
+                  onMouseLeave={e=>{e.currentTarget.style.borderColor="#b4babc";e.currentTarget.style.color="#b4babc"}}>
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/></svg>
+                  Add argument block
+                </button>
+                <p style={{fontSize:12,color:"#b4babc",marginTop:8,textAlign:"center"}}>Add another argument block to build a complex argument with tributaries.</p>
+              </div>
+              <p style={{fontSize:12,color:"#b4babc",marginTop:24,textAlign:"center",lineHeight:1.5}}>Tip: Press <strong>Enter</strong> to add a new support line. Press <strong>Backspace</strong> on an empty line to remove it.</p>
+            </div>
+          </div>
+        );
+      }
+
+      // ── COMPLEX ──
+      return (
+        <div style={{minHeight:"100vh",background:"#f8f7f4",fontFamily:"'Segoe UI',system-ui,-apple-system,sans-serif",padding:"24px 16px",boxSizing:"border-box"}}>
+          <div style={{maxWidth:720,margin:"0 auto"}}>
+            <div style={{marginBottom:20}}>
+              <h1 style={{fontSize:22,fontWeight:700,color:"#000000",margin:"0 0 4px 0",letterSpacing:"-0.3px"}}>
+                Schematized Argument Builder
+                <span style={{
+                  fontSize:10, fontWeight:700, color:"#fed184", background:"#1a1a2e",
+                  padding:"3px 8px", borderRadius:6, marginLeft:10, verticalAlign:"middle",
+                  letterSpacing:"0.5px", textTransform:"uppercase",
+                }}>Instructor · IBE</span>
+              </h1>
+              <p style={{fontSize:14,color:"#b4babc",margin:0,lineHeight:1.5}}>Build your complex argument. Link conclusions to support slots to connect tributaries.</p>
+            </div>
+
+            <ExtractionPanel onExtracted={handleExtracted} />
+
+            {blocks.map(block=>{
+              const isMain=block.id===mainBlockId;const cLabel=concLabels[block.id];
+              return (
+                <div key={block.id} style={{background:"#fff",border:isMain?"2px solid #e9171f":"1px solid #d8dbdc",borderRadius:12,padding:"16px 18px",marginBottom:12}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+                    <span style={{background:isMain?"#e9171f":"#e9171f",color:"#fff",fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:20,letterSpacing:"0.5px",textTransform:"uppercase"}}>
+                      {isMain?"Main Argument":hasAnyLinks?`Tributary argument ${cLabel.slice(2)}`:`Argument ${cLabel.slice(2)}`}
+                    </span>
+                    {blocks.length>1&&(
+                      <button onClick={()=>removeBlock(block.id)} style={SB}
+                        onMouseEnter={e=>{e.currentTarget.style.color="#e9171f";e.currentTarget.style.borderColor="#e9171f"}}
+                        onMouseLeave={e=>{e.currentTarget.style.color="#b4babc";e.currentTarget.style.borderColor="#d8dbdc"}}>Remove</button>
+                    )}
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:8}}>
+                    {block.supports.map((s,si)=>renderSupport(block,s,si,false))}
+                  </div>
+                  <AddBtn onClick={()=>addSupport(block.id)} label="Add support"/>
+                  <div style={{borderTop:"2.5px dashed #000000",margin:"14px 0"}}/>
+                  <div style={{...CB,background:"#f8f7f4"}}>
+                    <span style={{...ML,color:isMain?"#e9171f":"#d97706",minWidth:30}}>{cLabel}.</span>
+                    <input type="text" value={block.conclusion} onChange={e=>updateConclusion(block.id,e.target.value)}
+                      placeholder={isMain?"Enter the main conclusion...":`Enter conclusion...`} style={IS}/>
+                  </div>
+                </div>
+              );
+            })}
+            <button onClick={addBlock} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"100%",padding:"12px",background:"none",border:"2px dashed #b4babc",borderRadius:12,color:"#b4babc",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"inherit",marginBottom:20,transition:"all 0.15s"}}
+              onMouseEnter={e=>{e.currentTarget.style.borderColor="#e9171f";e.currentTarget.style.color="#e9171f"}}
+              onMouseLeave={e=>{e.currentTarget.style.borderColor="#b4babc";e.currentTarget.style.color="#b4babc"}}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/></svg>
+              Add argument block
+            </button>
+
+            {renderIBEFields()}
+
+            {hasContent&&(
+              <div style={{background:"#fff",border:"1px solid #d8dbdc",borderRadius:10,padding:"18px 20px",marginBottom:20}}>
+                <span style={{...LS,display:"block",marginBottom:12}}>Preview</span>
+                <pre style={{fontFamily:MF,fontSize:13,lineHeight:1.6,color:"#000000",margin:0,whiteSpace:"pre",overflowX:"auto"}}>{buildOutput()}</pre>
+              </div>
+            )}
+            <ActBtns copied={copied} onCopy={handleCopy} onDownload={handleDownload} onClear={handleClear} disabled={!hasContent}/>
+            <p style={{fontSize:12,color:"#b4babc",marginTop:24,textAlign:"center",lineHeight:1.5}}>Tip: Press <strong>Enter</strong> to add a new support line. Use the link buttons to connect a tributary conclusion into a support slot.</p>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+  </script>
+
+<!-- ===== FEEDBACK BUTTON ===== -->
+<button id="feedback-btn" aria-label="Give feedback on this tool" title="Feedback"
+  onclick="window.open('https://airtable.com/appxdI0VPvkKlM8u1/pag4PguwP8nUxPA3p/form','_blank')">
+  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+    style="vertical-align: middle; margin-right: 5px;">
+    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+  </svg>
+  Feedback
+</button>
+
+<style>
+  #feedback-btn {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    z-index: 9998;
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 16px;
+    background-color: #e9171f;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    transition: background-color 0.2s ease, transform 0.15s ease;
+  }
+  #feedback-btn:hover {
+    background-color: #c01016;
+    transform: translateY(-1px);
+  }
+  #feedback-btn:focus-visible {
+    outline: 2px solid #fed184;
+    outline-offset: 2px;
+  }
+  @media (max-width: 600px) {
+    #feedback-btn {
+      bottom: 12px;
+      right: 12px;
+      font-size: 12px;
+      padding: 7px 12px;
+    }
+  }
+</style>
+
+</body>
+</html>
